@@ -87,14 +87,22 @@ function main() {
                                           0, -1, 0, // triangle 2
                                           0, 2, -2, 
                                           0, 2, 2], },
-
-     texcoord: { numComponents: 2, data: [0.5, 0, 1, 1, 0, 1],               },
-     normal:   { numComponents: 3, data: [0, 0, 1, 0, 0, 1, 0, 0, 1],        },
   };
+
   var bufferInfo = webglUtils.createBufferInfoFromArrays(gl, arrays);
   var program = createProgram(gl, vertexShader, fragmentShader);
-  var uniformSetters = webglUtils.createUniformSetters(gl, program);
+
+  var uniformSetters             = webglUtils.createUniformSetters(gl, program);
+  var u_viewInverseLoc           = gl.getUniformLocation(program, "u_viewInverse");
+  var u_worldViewProjectionLoc   = gl.getUniformLocation(program, "u_worldViewProjection");
+
+  var a_positionLoc = gl.getAttribLocation(program, "a_position");
   var attribSetters  = webglUtils.createAttributeSetters(gl, program);
+
+  // Create a buffer to put positions in
+  var positionBuffer = gl.createBuffer();
+  // Bind it to ARRAY_BUFFER (think of it as ARRAY_BUFFER = positionBuffer)
+  gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
 
   function degToRad(d) {
     return d * Math.PI / 180;
@@ -108,8 +116,6 @@ function main() {
 
   var uniformsThatAreComputedForEachObject = {
     u_worldViewProjection:   m4.identity(),
-    u_world:                 m4.identity(),
-    u_worldInverseTranspose: m4.identity(),
   };
 
   var rand = function(min, max) {
@@ -149,13 +155,25 @@ function main() {
     } else return range / 60000;
   }
 
+  function resizeCanvasToDisplaySize(canvas, multiplier) {
+    multiplier = multiplier || 1;
+    const width  = canvas.clientWidth  * multiplier | 0;
+    const height = canvas.clientHeight * multiplier | 0;
+    if (canvas.width !== width ||  canvas.height !== height) {
+      canvas.width  = width;
+      canvas.height = height;
+      return true;
+    }
+    return false;
+  }
+
   drawScene();
 
   // Draw the scene.
   function drawScene(time) {
     time = time * 0.0001 + 5;
 
-    webglUtils.resizeCanvasToDisplaySize(gl.canvas);
+    resizeCanvasToDisplaySize(gl.canvas);
 
     // Tell WebGL how to convert from clip space to pixels
     gl.viewport(0, 0, gl.canvas.width, gl.canvas.height);
@@ -169,7 +187,7 @@ function main() {
         m4.perspective(fieldOfViewRadians, aspect, 1, 2000);
 
     // Compute the camera's matrix using look at.
-    var cameraPosition = [200, 0, 0];
+    var cameraPosition = [200, 150, 0];
     var target = [0, 0, 0];
     var up = [0, 1, 0];
     var cameraMatrix = m4.lookAt(cameraPosition, target, up, uniformsThatAreTheSameForAllObjects.u_viewInverse);
@@ -184,9 +202,11 @@ function main() {
     // Setup all the needed attributes.
     webglUtils.setBuffersAndAttributes(gl, attribSetters, bufferInfo);
 
-    // Set the uniforms that are the same for all objects.
-    webglUtils.setUniforms(uniformSetters, uniformsThatAreTheSameForAllObjects);
-
+    gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
+    gl.enableVertexAttribArray(a_positionLoc);
+    
+    // uniforms similare pentru toate obiectele
+    gl.uniformMatrix4fv(u_viewInverseLoc, false, viewMatrix);
     // Draw objects
     objects.forEach(function(object) {
       object.xRotation = object.xRotation + checkStarSector(object.radius) * 3;
@@ -195,18 +215,14 @@ function main() {
       var worldMatrix = m4.xRotation(object.xRotation * time);
       worldMatrix = m4.yRotate(worldMatrix, object.yRotation * time);
       worldMatrix = m4.translate(worldMatrix, 0, 0, object.radius);
-      uniformsThatAreComputedForEachObject.u_world = worldMatrix;
 
       // Multiply the matrices.
       m4.multiply(viewProjectionMatrix, worldMatrix, uniformsThatAreComputedForEachObject.u_worldViewProjection);
       m4.transpose(m4.inverse(worldMatrix), uniformsThatAreComputedForEachObject.u_worldInverseTranspose);
-
+      
+      gl.uniformMatrix4fv(u_worldViewProjectionLoc, false, viewMatrix);
       // Set the uniforms we just computed
       webglUtils.setUniforms(uniformSetters, uniformsThatAreComputedForEachObject);
-
-      // Set the uniforms that are specific to the this object.
-      webglUtils.setUniforms(uniformSetters, object.materialUniforms);
-
       // Draw the geometry.
       gl.drawArrays(gl.TRIANGLES, 0, bufferInfo.numElements);
     });
