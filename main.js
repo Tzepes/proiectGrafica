@@ -6,7 +6,6 @@ var vertexShaderGLSL = [
    'attribute vec4 a_position;',
    '',
    'varying vec4 v_position;',
-   '',
    'void main() {',
      'v_position = (u_worldViewProjection * a_position);',
      'gl_Position = v_position;',
@@ -15,9 +14,9 @@ var vertexShaderGLSL = [
 
 var fragmentShaderGLSL = [
   'precision mediump float;',
-  '',
+  'uniform vec4 u_color;',
   'void main() {',
-  'gl_FragColor = vec4(1,1,0,1);',
+  'gl_FragColor = u_color;',
   '}'
 ].join('\n')
 
@@ -88,31 +87,28 @@ function main() {
                                           0, 2, -2, 
                                           0, 2, 2], },
   };
+  
 
   var bufferInfo = webglUtils.createBufferInfoFromArrays(gl, arrays);
   var program = createProgram(gl, vertexShader, fragmentShader);
 
-  var uniformSetters             = webglUtils.createUniformSetters(gl, program);
-  var u_viewInverseLoc           = gl.getUniformLocation(program, "u_viewInverse");
-  var u_worldViewProjectionLoc   = gl.getUniformLocation(program, "u_worldViewProjection");
-
-  var a_positionLoc = gl.getAttribLocation(program, "a_position");
-  var attribSetters  = webglUtils.createAttributeSetters(gl, program);
-
-  // Create a buffer to put positions in
   var positionBuffer = gl.createBuffer();
-  // Bind it to ARRAY_BUFFER (think of it as ARRAY_BUFFER = positionBuffer)
-  gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
+  
+  var uniformSetters             = webglUtils.createUniformSetters(gl, program);
+  var u_worldViewProjectionLoc   = gl.getUniformLocation(program, "u_worldViewProjection");
+  var colorLocation              = gl.getUniformLocation(program, "u_color");
+  
+  var a_positionLoc = gl.getAttribLocation(program, "a_position");
+
+  //var colorBuffer = gl.createBuffer();
+  // // Bind it to ARRAY_BUFFER (think of it as ARRAY_BUFFER = colorBuffer)
+  //gl.bindBuffer(gl.ARRAY_BUFFER, colorBuffer);
 
   function degToRad(d) {
     return d * Math.PI / 180;
   }
 
   var fieldOfViewRadians = degToRad(60);
-
-  var uniformsThatAreTheSameForAllObjects = {
-    u_viewInverse:           m4.identity(),
-  };
 
   var uniformsThatAreComputedForEachObject = {
     u_worldViewProjection:   m4.identity(),
@@ -126,18 +122,42 @@ function main() {
     return min + Math.random() * (max - min);
   };
 
+  var colorOption = ["blue", "red", "yellow", "white", "orange", "cyan"];
+
+  function starColor(option){
+    console.log(colorOption[option]);
+    if(colorOption[option] == "blue"){
+      return [0, 0, 255, 1];
+    }
+    if(colorOption[option] == "red"){
+      return [255, 0, 0, 1];
+    }
+    if(colorOption[option] == "yellow"){
+      return [255, 255, 0, 1]
+    }
+    if(colorOption[option] == "white"){
+      return [255, 255, 255, 1]
+    }
+    if(colorOption[option] == "orange"){
+      return [255, 165, 0, 1]
+    }
+    if(colorOption[option] == "cyan"){
+      return [0, 255, 255, 1]
+    }
+  }
+
   var objects = [];
   var numObjects = 1000;
-  var baseColor = rand(240);
-  for (var ii = 0; ii < numObjects; ++ii) {
+  for (var ii = 0; ii < numObjects; ++ii) {    
     objects.push({
       radius: rand(100),
       xRotation: rand(Math.PI),
       yRotation: rand(0),
       materialUniforms: {
-        u_specular:              [1, 1, 1, 1],
-        u_shininess:             rand(500),        
+        u_specular:  [1, 1, 1, 1],
+        u_shininess: rand(500),        
       },
+      color : starColor(Math.round(rand(0, 5)))
     });
   }
 
@@ -187,10 +207,10 @@ function main() {
         m4.perspective(fieldOfViewRadians, aspect, 1, 2000);
 
     // Compute the camera's matrix using look at.
-    var cameraPosition = [200, 150, 0];
+    var cameraPosition = [200, -190, 0];
     var target = [0, 0, 0];
     var up = [0, 1, 0];
-    var cameraMatrix = m4.lookAt(cameraPosition, target, up, uniformsThatAreTheSameForAllObjects.u_viewInverse);
+    var cameraMatrix = m4.lookAt(cameraPosition, target, up, 0);
 
     // Make a view matrix from the camera matrix.
     var viewMatrix = m4.inverse(cameraMatrix);
@@ -199,18 +219,21 @@ function main() {
 
     gl.useProgram(program);
 
-    // Setup all the needed attributes.
-    webglUtils.setBuffersAndAttributes(gl, attribSetters, bufferInfo);
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, positionBuffer)
 
-    gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
+    var size = 3;          // 3 components per iteration
+    var type = gl.FLOAT;   // the data is 32bit floats
+    var normalize = false; // don't normalize the data
+    var stride = 0;        // 0 = move forward size * sizeof(type) each iteration to get the next position
+    var offset = 0;        // start at the beginning of the buffer
+    gl.vertexAttribPointer(
+      a_positionLoc, size, type, normalize, stride, offset);
+
     gl.enableVertexAttribArray(a_positionLoc);
     
-    // uniforms similare pentru toate obiectele
-    gl.uniformMatrix4fv(u_viewInverseLoc, false, viewMatrix);
     // Draw objects
     objects.forEach(function(object) {
       object.xRotation = object.xRotation + checkStarSector(object.radius) * 3;
-      //console.log(object.xRotation);
       // Compute a position for this object based on the time.
       var worldMatrix = m4.xRotation(object.xRotation * time);
       worldMatrix = m4.yRotate(worldMatrix, object.yRotation * time);
@@ -220,11 +243,14 @@ function main() {
       m4.multiply(viewProjectionMatrix, worldMatrix, uniformsThatAreComputedForEachObject.u_worldViewProjection);
       m4.transpose(m4.inverse(worldMatrix), uniformsThatAreComputedForEachObject.u_worldInverseTranspose);
       
+      gl.uniform4fv(colorLocation, object.color);
+
       gl.uniformMatrix4fv(u_worldViewProjectionLoc, false, viewMatrix);
       // Set the uniforms we just computed
       webglUtils.setUniforms(uniformSetters, uniformsThatAreComputedForEachObject);
+      //gl.disableVertexAttribArray(object)
       // Draw the geometry.
-      gl.drawArrays(gl.TRIANGLES, 0, bufferInfo.numElements);
+      gl.drawArrays(gl.TRIANGLES, 0, 6);
     });
 
     requestAnimationFrame(drawScene);
