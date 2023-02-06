@@ -100,10 +100,6 @@ function main() {
   
   var a_positionLoc = gl.getAttribLocation(program, "a_position");
 
-  //var colorBuffer = gl.createBuffer();
-  // // Bind it to ARRAY_BUFFER (think of it as ARRAY_BUFFER = colorBuffer)
-  //gl.bindBuffer(gl.ARRAY_BUFFER, colorBuffer);
-
   function degToRad(d) {
     return d * Math.PI / 180;
   }
@@ -125,7 +121,6 @@ function main() {
   var colorOption = ["blue", "red", "yellow", "white", "orange", "cyan"];
 
   function starColor(option){
-    console.log(colorOption[option]);
     if(colorOption[option] == "blue"){
       return [0, 0, 255, 1];
     }
